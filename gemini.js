@@ -28,8 +28,10 @@ async function generateReply(historyText) {
     
     while (attempts < maxAttempts) {
         try {
+            // Round-robin: pick current key then advance for next call
             const ai = getAIClient();
             const currentModel = models[currentModelIndex];
+            currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
             
             const response = await ai.models.generateContent({
                 model: currentModel,
@@ -42,7 +44,7 @@ async function generateReply(historyText) {
                     }
                 ],
                 config: {
-                    temperature: 1.0 // Removed thinkingConfig for much faster replies
+                    temperature: 1.0
                 }
             });
             return response.text;
