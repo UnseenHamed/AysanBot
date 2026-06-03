@@ -5,8 +5,14 @@ const db = require('./db');
 const { generateReply } = require('./gemini');
 const { default: PQueue } = require('p-queue');
 
-// Queue to handle messages sequentially so we don't spam the AI or get blocked
-const queue = new PQueue({ concurrency: 1 });
+// Per-group queues so each group gets served independently
+const groupQueues = new Map();
+function getGroupQueue(groupId) {
+    if (!groupQueues.has(groupId)) {
+        groupQueues.set(groupId, new PQueue({ concurrency: 1 }));
+    }
+    return groupQueues.get(groupId);
+}
 
 let client = null;
 let phoneCodePromise = null;
@@ -187,19 +193,28 @@ function setupMessageHandler() {
             return; // Ignore if not mentioning or replying to Aysan
         }
 
-        // Add to queue
-        queue.add(async () => {
+        // Add to per-group queue
+        const groupQueue = getGroupQueue(peerIdStr);
+        groupQueue.add(async () => {
             try {
-                // Fetch last 100 messages for context
-                const history = await client.getMessages(message.peerId, { limit: 100 });
+                // Fetch last 15 messages for concise context
+                const history = await client.getMessages(message.peerId, { limit: 15 });
                 
-                // Format history
-                const historyText = history.reverse().map(m => {
+                // Format context (exclude the target message)
+                const contextMessages = history.reverse().filter(m => m.id !== message.id);
+                const contextText = contextMessages.map(m => {
                     const sender = m.sender ? (m.sender.username || m.sender.firstName || 'User') : 'User';
-                    return `[${sender}]: ${m.message || '[Media]'}`;
+                    const isMe = m.out ? ' (تو/آیسان)' : '';
+                    return `[${sender}${isMe}]: ${m.message || '[مدیا]'}`;
                 }).join('\n');
+                
+                // Clearly mark the target message
+                const senderName = message.sender ? (message.sender.username || message.sender.firstName || 'User') : 'User';
+                const targetText = `[${senderName}]: ${message.message || '[مدیا]'}`;
 
-                const replyText = await generateReply(historyText);
+                const fullPrompt = contextText + '\n\n---\nاین پیام مستقیماً به تو (آیسان) گفته شده و باید بهش جواب بدی:\n' + targetText;
+
+                const replyText = await generateReply(fullPrompt);
                 if (replyText) {
                     await client.sendMessage(message.peerId, {
                         message: replyText,
@@ -229,17 +244,19 @@ function setupMessageHandler() {
 async function triggerGroupAction(peerIdStr) {
     if (!client || !client.connected) return;
     
-    queue.add(async () => {
+    const groupQueue = getGroupQueue(peerIdStr);
+    groupQueue.add(async () => {
         try {
             const peer = await client.getInputEntity(peerIdStr);
-            const history = await client.getMessages(peer, { limit: 100 });
+            const history = await client.getMessages(peer, { limit: 15 });
             if (history.length === 0) return;
             
             const latestMsg = history[0];
             
             const historyText = history.reverse().map(m => {
                 const sender = m.sender ? (m.sender.username || m.sender.firstName || 'User') : 'User';
-                return `[${sender}]: ${m.message || '[Media]'}`;
+                const isMe = m.out ? ' (تو/آیسان)' : '';
+                return `[${sender}${isMe}]: ${m.message || '[مدیا]'}`;
             }).join('\n');
 
             const replyText = await generateReply(historyText);
