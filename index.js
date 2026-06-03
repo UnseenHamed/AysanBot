@@ -21,7 +21,10 @@ async function main() {
     console.log("Initializing userbot...");
     await userbot.initClient();
 
-    userbot.setAdminNotifier((msg, peerIdStr) => {
+    userbot.setAdminNotifier(async (msg, peerIdStr) => {
+        const notifEnabled = await db.getSetting('notifications_enabled');
+        if (notifEnabled === '0') return; // '0' means disabled
+        
         if (peerIdStr && msg.includes('❌')) {
             bot.telegram.sendMessage(process.env.ADMIN_ID, msg, Markup.inlineKeyboard([
                  [Markup.button.callback('🔄 تلاش مجدد', `retry_${peerIdStr}`)]

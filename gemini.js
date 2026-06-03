@@ -33,7 +33,7 @@ async function generateReply(historyText) {
         return response.text;
     } catch (error) {
         console.error('Error in Gemini generation:', error);
-        return null;
+        throw error;
     }
 }
 

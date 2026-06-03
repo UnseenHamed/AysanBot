@@ -21,6 +21,7 @@ function getMainMenuMarkup() {
         [Markup.button.callback('👥 مدیریت گروه‌ها', 'manage_groups')],
         [Markup.button.callback('▶️ شروع چت در گروه‌های فعال', 'start_chat_active')],
         [Markup.button.callback('⏱ تنظیم تاخیر پاسخگویی', 'set_delay')],
+        [Markup.button.callback('🔔 تنظیمات اعلان‌ها', 'notifications_menu')],
         [Markup.button.callback('🚪 خروج از اکانت', 'logout')]
     ]);
 }
@@ -94,6 +95,37 @@ bot.action('start_chat_active', async (ctx) => {
     for (const groupId of activeGroups) {
         userbot.triggerGroupAction(groupId);
     }
+});
+
+bot.action('notifications_menu', async (ctx) => {
+    const notifEnabled = await db.getSetting('notifications_enabled') !== '0';
+    const statusText = notifEnabled ? 'روشن 🟢' : 'خاموش 🔴';
+    const toggleAction = notifEnabled ? 'toggle_notif_off' : 'toggle_notif_on';
+    const toggleText = notifEnabled ? '🔕 خاموش کردن اعلان‌ها' : '🔔 روشن کردن اعلان‌ها';
+    
+    ctx.editMessageText(
+        `🔔 **تنظیمات اعلان‌ها**\n\nوضعیت فعلی: **${statusText}**\n\nدر صورت روشن بودن، خطاهای ربات و گزارش ارسال پیام‌ها در همین پنل برای شما ارسال می‌شود.`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback(toggleText, toggleAction)],
+                [Markup.button.callback('🔙 بازگشت به منوی اصلی', 'back_to_main')]
+            ])
+        }
+    ).catch(() => {});
+    ctx.answerCbQuery();
+});
+
+bot.action('toggle_notif_on', async (ctx) => {
+    await db.setSetting('notifications_enabled', '1');
+    ctx.answerCbQuery("اعلان‌ها روشن شدند ✅");
+    bot.handleUpdate({ ...ctx.update, callback_query: { ...ctx.update.callback_query, data: 'notifications_menu' } });
+});
+
+bot.action('toggle_notif_off', async (ctx) => {
+    await db.setSetting('notifications_enabled', '0');
+    ctx.answerCbQuery("اعلان‌ها خاموش شدند ❌");
+    bot.handleUpdate({ ...ctx.update, callback_query: { ...ctx.update.callback_query, data: 'notifications_menu' } });
 });
 
 bot.action('manage_groups', async (ctx) => {

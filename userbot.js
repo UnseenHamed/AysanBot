@@ -129,7 +129,11 @@ function setAdminNotifier(fn) {
     adminNotifier = fn;
 }
 
+let isHandlerSetup = false;
 function setupMessageHandler() {
+    if (isHandlerSetup) return;
+    isHandlerSetup = true;
+    
     client.addEventHandler(async (event) => {
         const message = event.message;
         if (!message || !message.peerId) return;
